@@ -1,0 +1,152 @@
+#!/bin/bash
+###############################################################################                                      
+#                                                                             #
+#                        Google Random Number Generator                       #
+#                        version 1.1                                          #
+#                                                                             #
+# Copyright 2005 Sam Bisbee                                                   #
+# <www.geecs.org/~sbisbee/grng.html>                                          #
+#                                                                             #  
+###############################################################################
+#                                                                             #
+# This program is free software; you can redistribute it and/or modify        #
+# it under the terms of the GNU General Public License as published by        #
+# the Free Software Foundation; either version 2 of the License, or           #
+# (at your option) any later version.                                         #
+#                                                                             #
+# This program is distributed in the hope that it will be useful,             #
+# but WITHOUT ANY WARRANTY; without even the implied warranty of              #
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the               #
+# GNU General Public License for more details.                                #  
+#                                                                             #
+# You should have received a copy of the GNU General Public License           #
+# along with this program; if not, write to the Free Software                 #
+# Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA  #
+#                                                                             #
+############################################################################### 
+
+#the word list file where we grab words to query Google with
+WORD_LIST="./words.lst"
+
+#web server to send requests to
+HOST="www.google.com"
+
+#starting word count - must be an integer
+NET_WC=0
+
+#changes verbosity: 1 to be verbose, 0 to not be verbose
+VERB=1
+
+# Check for prerequisites (awk, sed, nc) - may be swapped out with actual paths
+# to executables (ex., "/usr/bin/nc").
+NETCAT=`which nc`
+AWK=`which awk`
+SED=`which sed`
+
+####### Do not edit bellow this line unless you know what you're doing ########
+
+if [[ -e ${NETCAT} && -e ${AWK} && -e ${SED} ]]
+then
+  if [[ ${VERB} == 1 ]]
+  then
+    echo -e "Locate required binaries\t[OK]"
+  fi
+else
+  echo -e "Locate required binaries\t[FAILED] (install and retry)"
+  exit 1;
+fi
+
+# Get word to query google with
+if [[ -e ${WORD_LIST} && -f ${WORD_LIST} ]]
+then
+  WORD=`head -n1 ${WORD_LIST}`
+  ${SED} -i -e '/'"${WORD}"'/d' ${WORD_LIST} #will also remove duplicates
+
+  if [[ ${VERB} == 1 ]]
+  then
+    echo -e "Locate word list\t\t[OK]"
+    echo "Word: ${WORD}"
+  fi  
+else
+  echo -e "Locate word list\t\t[FAILED]\n"
+  exit
+fi 
+
+#must be defined here or else $WORD is not defined
+PAGE="/search?q=${WORD}"
+PACKET="GET ${HOST}${PAGE} HTTP/1.0\n"
+
+echo -e ""
+
+# Fix wc multibyte/wide character bug (will revert to original value at end)
+LAN=`echo ${LANG}`
+LANG="en_US"
+export > /dev/null
+
+# query google & filter out result URLs
+RES=`echo -e ${PACKET} | ${NETCAT} -w 5 ${HOST} 80 | tr '<>"\47 ' '[\n*]' | ${SED} -n -e 's/href=//gI' -e 's/src=//gI' -e '/http:/Ip' | ${SED} -e '/google/d' -e '/.search/d' -e '/^\//d'`
+
+# go through the results
+I=0
+for URL in ${RES}
+do
+  # break down the URLs into host and page
+  HOST=`echo ${URL} | ${SED} -e 's_^\(\([^/]*/\)\{3\}\).*_\1_' -e 's/^http://' -e 's/\///g'`
+  PAGE=`echo ${URL} | ${SED} -e 's/^http:\/\/'"${HOST}"'//'`
+    #alt method: PAGE=`echo ${URL} | ${SED} -r -e 's/^http:\/\/[^\/]+//'`  
+
+  # remove trailing slash from ${PAGE} on lines with >1 slash 
+  SC=`echo ${PAGE} | ${SED} -e 's/\//&\n/g' | grep -c /` # causes blank lines to be entered into ${PAGE}
+                     # but that is ok (does not affect `wc`)
+  if [[ ${SC} > 1 ]]
+  then
+    PAGE=`echo ${PAGE} | ${SED} -e 's/\/$//'` 
+  fi
+
+  PACKET="GET ${PAGE} HTTP/1.0\nHost: ${HOST}\n" # create a new packet to be sent
+
+  # load the page and check HTTP version (HTTP/1.1 support) 
+  GET=`echo -e ${PACKET} | ${NETCAT} -w 5 ${HOST} 80`
+
+  V=`echo ${GET} | head -n1 | grep -c 1.1`
+  if [[ ${V} == 1 ]]
+  then
+    # send a HTTP/1.1 accepted request
+    PACKET="GET ${PAGE} HTTP/1.1\nHost: ${HOST}\nConnection: Close\n"
+    GET=`echo -e ${PACKET} | ${NETCAT} -w 10 ${HOST} 80`
+  fi
+
+  # filter out HTML tags
+  GET=`echo ${GET} | ${SED} -e 's/&nbsp//g' -e :a -e 's/<[^>]*>//g;/</N;//ba'`
+
+  # word counts
+  WC=`echo ${GET} | wc -w`
+  NET_WC=$((${NET_WC} + ${WC}))
+
+  # grab the middle word of every page and add it to the list 
+  W=`echo ${GET} | ${SED} -e 's/[[:punct:]]//g' | ${AWK} '{ print $'"$((${WC} / 2))"' }' | head -n1 | ${SED} -e '/[[:space:]]/d'`
+
+  if [[ -n ${W} ]]
+  then
+    echo ${W} >> ${WORD_LIST}    
+  fi
+
+  # optional display
+  if [[ ${VERB} == 1 ]]
+  then  
+    echo "${I}: ${URL} = ${WC}"
+    I=$((${I} + 1))
+  fi
+done
+
+# display result
+if [[ $VERB == 1 ]]
+then
+  echo "Total: ${NET_WC}"
+else
+  echo "${NET_WC}"
+fi
+
+# revert ${LANG} (see top)
+LANG=${LAN}
+export > /dev/null

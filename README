@@ -1,0 +1,70 @@
+= grng 
+version 1.1
+
+grng stands for Google Random Number Generator. It has no association with
+Google, its trademarks, companies, etc.
+
+== Files
+
+COPYING         The software license, detailing how you can use, edit, etc.
+                this software.
+
+grng.bsh        The executable.
+
+words.lst       Used by the executable to query Google. It will append words to
+                this file as needed to keep the pump primed. 
+
+== Dependencies
+
+All of the following dependencies must be in the executable path. Versions
+listed have been tested and proven to work.
+
+ * bash (3.2) 
+ * head
+ * sed
+ * awk
+ * grep
+ * netcat
+
+== What does grng do?
+
+grng attempts to generate random numbers with the Google web search engine.
+Taking a word from a .lst file, grng googles it and takes the word count from
+each of the URLs on the first results page. grng takes the total of all the
+word counts and returns it.
+
+To date the resulting word counts have not proven to be truly random or
+anywhere close to pseudo random.
+
+== How to use grng
+
+grng will take the first word at the top of the words.lst file and query Google
+with it. If there are no words in words.lst then add one to the file - grng
+won't run without it.
+
+grng currently doesn't use any flags/options. If you want to change its options
+(ex., change its verbosity or binary paths), you'll have to edit the top of
+grng.bsh. Read the inline comments for instructions on how to do this.
+
+== Why write grng?
+
+While discussing random numbers on #linuxfriends on irc.oftc.net I stumbled
+across the idea that became grng. grng makes an honest effort to generate
+random numbers, not pseudo ones. I hoped that by using randomized human input
+from a constantly changing database (Google) that I would be able to extract
+random numbers. However, this is not possible as Google uses its patented page
+ranking system, which results in the same pages being listed first every time.
+Example: if you google "geecs" twice in a row you will receive the same
+results.
+
+There is also a geeky cool factor to generating random numbers with a search
+engine, which quickly became my "excuse" for writing grng. 
+
+It turned out to be a fun '05 summer hack.
+
+== Authors
+
+Anyone who has contributed to this release (code, testing, doc writing, etc.).
+
+Sam Bisbee      <sbisbee@computervip.com>
+
